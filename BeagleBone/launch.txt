@@ -1,0 +1,1 @@
+python -m flask --app Interfaz run --host=0.0.0.0

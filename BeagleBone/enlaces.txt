@@ -1,0 +1,6 @@
+https://flask.palletsprojects.com/en/3.0.x/quickstart/#a-minimal-application
+
+https://www.doctorgeeknerd.com/geeknerdblog/2015/7/12/web-interface-with-flask-and-beaglebone-black
+
+https://predictivehacks.com/?all-tips=how-to-add-action-buttons-in-flask
+
