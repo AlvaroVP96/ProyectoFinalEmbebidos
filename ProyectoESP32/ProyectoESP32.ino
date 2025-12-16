@@ -66,7 +66,7 @@ volatile unsigned long ULT_ISR2 = 0;
 int buzzer = 23;
 
 //=== MQTT ===
-String mqtt_server = "10.180.135.245";
+String mqtt_server = "10.180.135.244";
 const int mqtt_port = 1883;
 
 const char* TOPIC_PUERTA_EXTERIOR = "Sensores/Puertas/PuertaExterior";
@@ -74,6 +74,7 @@ const char* TOPIC_PUERTA_INTERIOR = "Sensores/Puertas/PuertaInterior";
 const char* TOPIC_PUERTA_LED = "Sensores/LED";
 const char* TOPIC_PUERTA_TEMPERATURA = "Sensores/temperatura";
 const char* TOPIC_PUERTA_HUMEDAD = "Sensores/humedad";
+const char* TOPIC_PUERTA_LOG = "LOG"
 
 // === Touchpad (despertar) ===
 // T0 = GPIO 4 (tocar para despertar del deep sleep)
@@ -197,7 +198,6 @@ void loop() {
         }
         else if(request.indexOf("/control") != -1) {
           manejarControl(client, request);
-          Serial.println("Aqui llega");
         }
         
         client.stop();
@@ -260,6 +260,8 @@ void manejarControl(WiFiClient &client, String request) {
     abrirPuerta2 = false;
     respuesta = "Cerrando puerta interior";
   }
+  
+  mqttClient.publish(TOPIC_PUERTA_LOG, respuesta)
 
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/plain");
@@ -269,31 +271,6 @@ void manejarControl(WiFiClient &client, String request) {
   Serial.println(respuesta);
 }
 
-void manejarEstados(WiFiClient &client) {
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: application/json");
-  client.println("Connection: close");
-  client.println();
-
-  String json = "{";
-  json += "\"puerta1\":"; json += puertaCerrada1 ? "true" : "false";
-  json += ",\"puerta2\":"; json += puertaCerrada2 ? "true" : "false";
-  json += ",\"temperatura\":"; json += String(temperatura);
-  json += ",\"humedad\":"; json += String(humedad);
-  json += ",\"led_color\":\"";
-
-  if (estadoLED == "Verde")      json += "#00ff00";
-  else if (estadoLED == "Rojo")  json += "#ff0000";
-  else if (estadoLED == "Azul")  json += "#0000ff";
-  else if (estadoLED == "Blanco")json += "#ffffff";
-  else                           json += "#000000";
-
-  json += "\",\"led_text\":\"";
-  json += estadoLED;
-  json += "\"}";
-
-  client.println(json);
-}
 
 void controlPuertas() {
   if ((abrirPuerta1 && puertaCerrada1) || error) {
@@ -324,9 +301,15 @@ void controlPuertas() {
     ledVerde(); noTone(buzzer);
   } else if (!puertaCerrada1 && !puertaCerrada2) {
     tone(buzzer,2500); ledRojo();
+    fallo = "¡¡CUIDADO!! TODAS LAS PUERTAS ABIERTAS"
+    mqttClient.publish(TOPIC_PUERTAS_log,fallo)
   } else {
     ledAzul(); noTone(buzzer);
   }
+  if estadoLED != ActualLED
+    mqttClient.publish(TOPIC_PUERTA_LED,estadoLED)
+    ActualLED = estadoLED
+  
 }
 
 void ledVerde(){  analogWrite(PIN_R,0);   analogWrite(PIN_G,255); analogWrite(PIN_B,0);   estadoLED = "Verde"; }
@@ -360,6 +343,12 @@ void EstadoPuerta1(){
   if(t - ULT_ISR1 > debounce){
     puertaCerrada1 = !puertaCerrada1; 
     ULT_ISR1 = t;
+    if puertaCerrada1:
+      estado1 = "Abierta"
+      mqttClient.publish(TOPIC_PUERTA_EXTERIOR,estado1)
+    else:
+      estado1 = "Cerrada"
+      mqttClient.publish(TOPIC_PUERTA_EXTERIOR,estado1)
   }
 
 }
@@ -368,6 +357,12 @@ void EstadoPuerta2(){
   if(t - ULT_ISR2 > debounce){
     puertaCerrada2 = !puertaCerrada2;
     ULT_ISR2 = t;
+    if puertaCerrada2:
+      estado2 = "Abierta"
+      mqttClient.publish(TOPIC_PUERTA_INTERIOR,estado2)
+    else:
+      estado2 = "Cerrada"
+      mqttClient.publish(TOPIC_PUERTA_INTERIOR, estado2)
   }
 }
 
