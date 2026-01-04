@@ -41,6 +41,7 @@ unsigned long IntervaloSensor = 10000;
 // === RGB ===
 const int PIN_R = 27, PIN_G = 26, PIN_B = 25;
 String estadoLED = "apagado";
+String ActualLED = "apagado";
 
 // === Servos / puertas ===
 Servo puerta1;
@@ -66,7 +67,7 @@ volatile unsigned long ULT_ISR2 = 0;
 int buzzer = 23;
 
 //=== MQTT ===
-String mqtt_server = "10.180.135.244";
+String mqtt_server = "10.192.239.208";
 const int mqtt_port = 1883;
 
 const char* TOPIC_PUERTA_EXTERIOR = "Sensores/Puertas/PuertaExterior";
@@ -74,7 +75,7 @@ const char* TOPIC_PUERTA_INTERIOR = "Sensores/Puertas/PuertaInterior";
 const char* TOPIC_PUERTA_LED = "Sensores/LED";
 const char* TOPIC_PUERTA_TEMPERATURA = "Sensores/temperatura";
 const char* TOPIC_PUERTA_HUMEDAD = "Sensores/humedad";
-const char* TOPIC_PUERTA_LOG = "LOG"
+const char* TOPIC_PUERTA_LOG = "LOG";
 
 // === Touchpad (despertar) ===
 // T0 = GPIO 4 (tocar para despertar del deep sleep)
@@ -261,7 +262,7 @@ void manejarControl(WiFiClient &client, String request) {
     respuesta = "Cerrando puerta interior";
   }
   
-  mqttClient.publish(TOPIC_PUERTA_LOG, respuesta)
+  mqttClient.publish(TOPIC_PUERTA_LOG, respuesta.c_str());
 
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/plain");
@@ -273,6 +274,7 @@ void manejarControl(WiFiClient &client, String request) {
 
 
 void controlPuertas() {
+  String log = "";
   if ((abrirPuerta1 && puertaCerrada1) || error) {
     if (puertaCerrada2) {
       puerta1.write(ANG_ABR);
@@ -299,16 +301,26 @@ void controlPuertas() {
 
   if (puertaCerrada1 && puertaCerrada2) {
     ledVerde(); noTone(buzzer);
+    log = "PUERTAS CERRADAS";
+    mqttClient.publish(TOPIC_PUERTA_LOG,log.c_str(),true);
   } else if (!puertaCerrada1 && !puertaCerrada2) {
     tone(buzzer,2500); ledRojo();
-    fallo = "¡¡CUIDADO!! TODAS LAS PUERTAS ABIERTAS"
-    mqttClient.publish(TOPIC_PUERTAS_log,fallo)
+    log = "¡¡CUIDADO!! TODAS LAS PUERTAS ABIERTAS";
+    mqttClient.publish(TOPIC_PUERTA_LOG,log.c_str(),true);
   } else {
     ledAzul(); noTone(buzzer);
+    if (!puertaCerrada1){
+      log = "Puerta Exterior abierta";
+    }else{
+      log = "Puerta Interior abierta";
+    }
+    mqttClient.publish(TOPIC_PUERTA_LOG,log.c_str(),true);
   }
-  if estadoLED != ActualLED
-    mqttClient.publish(TOPIC_PUERTA_LED,estadoLED)
-    ActualLED = estadoLED
+  if (estadoLED != ActualLED){
+    mqttClient.publish(TOPIC_PUERTA_LED,estadoLED.c_str(),true);
+    ActualLED = estadoLED;
+  }
+    
   
 }
 
@@ -327,10 +339,10 @@ void leerSensor(){
   if(tSensorActual - tSensor > IntervaloSensor){
     char temp[8];
     itoa(temperatura,temp,10);
-    mqttClient.publish(TOPIC_PUERTA_TEMPERATURA,temp);
+    mqttClient.publish(TOPIC_PUERTA_TEMPERATURA,temp,true);
     char hum[8];
     itoa(humedad,hum,10);
-    mqttClient.publish(TOPIC_PUERTA_HUMEDAD,hum);
+    mqttClient.publish(TOPIC_PUERTA_HUMEDAD,hum,true);
 
     tSensor = tSensorActual;
   }
@@ -343,12 +355,13 @@ void EstadoPuerta1(){
   if(t - ULT_ISR1 > debounce){
     puertaCerrada1 = !puertaCerrada1; 
     ULT_ISR1 = t;
-    if puertaCerrada1:
-      estado1 = "Abierta"
-      mqttClient.publish(TOPIC_PUERTA_EXTERIOR,estado1)
-    else:
-      estado1 = "Cerrada"
-      mqttClient.publish(TOPIC_PUERTA_EXTERIOR,estado1)
+    if (puertaCerrada1){
+      String estado1 = "Cerrada";
+      mqttClient.publish(TOPIC_PUERTA_EXTERIOR,estado1.c_str(),true);
+    }else{
+      String estado1 = "Abierta";
+      mqttClient.publish(TOPIC_PUERTA_EXTERIOR,estado1.c_str(),true);
+    }  
   }
 
 }
@@ -357,12 +370,13 @@ void EstadoPuerta2(){
   if(t - ULT_ISR2 > debounce){
     puertaCerrada2 = !puertaCerrada2;
     ULT_ISR2 = t;
-    if puertaCerrada2:
-      estado2 = "Abierta"
-      mqttClient.publish(TOPIC_PUERTA_INTERIOR,estado2)
-    else:
-      estado2 = "Cerrada"
-      mqttClient.publish(TOPIC_PUERTA_INTERIOR, estado2)
+    if (puertaCerrada2){
+      String estado2 = "Cerrada";
+      mqttClient.publish(TOPIC_PUERTA_INTERIOR,estado2.c_str(),true);
+    }else{
+      String estado2 = "Abierta";
+      mqttClient.publish(TOPIC_PUERTA_INTERIOR, estado2.c_str(),true);
+    } 
   }
 }
 
@@ -372,6 +386,10 @@ void beep(int frecuencia, int duracion) {
   noTone(buzzer);
 }
 
+
+//Añadir el gotoSleep si ha pasado 1 min que no se ha usado el control de puertas
+//El sistema se despertara cuando se abra una puerta.
+//No será deepsleep para no perder comunicaciones wifi 
 void goToSleep(){
   // Estado seguro
   noTone(buzzer);

@@ -1,6 +1,7 @@
 from flask import Flask, render_template_string
 import paho.mqtt.client as mqtt
 import threading
+import time
 
 app = Flask(__name__)
 
@@ -9,14 +10,19 @@ ultimo_mensaje_temp = "Esperando actualización..."
 ultimo_mensaje_hum = "Esperando actualización..."
 ultimo_mensaje_door1 = "Esperando actualización..."
 ultimo_mensaje_door2 = "Esperando actualización..."
+ultimo_mensaje_log = "Esperando actualizacion..."
+ultimo_mensaje_led = "Esperando actualizacion..."
+
 
 # Configuración MQTT
 MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
 MQTT_TOPIC_TEMP = "Sensores/temperatura"
 MQTT_TOPIC_HUM = "Sensores/humedad"
-MQTT_TOPIC_DOOR_1 = "Sensores/Puertas/Puerta1"
-MQTT_TOPIC_DOOR_2 = "Sensores/Puertas/Puerta2"
+MQTT_TOPIC_DOOR_1 = "Sensores/Puertas/PuertaExterior"
+MQTT_TOPIC_DOOR_2 = "Sensores/Puertas/PuertaInterior"
+MQTT_TOPIC_LED = "Sensores/LED"
+MQTT_TOPIC_LOG = "LOG"
 
 # Callback cuando se conecta al broker MQTT
 def on_connect(client, userdata, flags, rc, properties=None):
@@ -25,16 +31,20 @@ def on_connect(client, userdata, flags, rc, properties=None):
     client.subscribe(MQTT_TOPIC_HUM)
     client.subscribe(MQTT_TOPIC_DOOR_1)
     client.subscribe(MQTT_TOPIC_DOOR_2)
+    client.subscribe(MQTT_TOPIC_LED)
+    client.subscribe(MQTT_TOPIC_LOG)
     print(f"Suscrito al topic: {MQTT_TOPIC_TEMP}")
     print(f"Suscrito al topic: {MQTT_TOPIC_HUM}")
     print(f"Suscrito al topic: {MQTT_TOPIC_DOOR_1}")
     print(f"Suscrito al topic: {MQTT_TOPIC_DOOR_2}")
+    print(f"Suscrito al topic: {MQTT_TOPIC_LED}")
+    print(f"Suscrito al topic: {MQTT_TOPIC_LOG}")
 
 
 
 # Callback cuando se recibe un mensaje
 def on_message(client, userdata, msg):
-    global ultimo_mensaje_temp, ultimo_mensaje_hum,ultimo_mensaje_door2,ultimo_mensaje_door1
+    global ultimo_mensaje_temp, ultimo_mensaje_hum, ultimo_mensaje_door2, ultimo_mensaje_door1, ultimo_mensaje_led, ultimo_mensaje_log
     
     # Verificar de qué topic viene el mensaje
     if msg.topic == MQTT_TOPIC_TEMP:
@@ -45,10 +55,16 @@ def on_message(client, userdata, msg):
         print(f"Mensaje humedad recibido: {ultimo_mensaje_hum}")
     elif msg.topic == MQTT_TOPIC_DOOR_1:
         ultimo_mensaje_door1 = msg.payload.decode()
-        print(f"Mensaje humedad recibido: {ultimo_mensaje_door1}")
+        print(f"Mensaje puerta exterior recibido: {ultimo_mensaje_door1}")
     elif msg.topic == MQTT_TOPIC_DOOR_2:
         ultimo_mensaje_door2 = msg.payload.decode()
-        print(f"Mensaje humedad recibido: {ultimo_mensaje_door2}")
+        print(f"Mensaje Puerta interior recibido: {ultimo_mensaje_door2}")
+    elif msg.topic == MQTT_TOPIC_LED:
+        ultimo_mensaje_led = msg.payload.decode()
+        print(f"Mensaje led recibido: {ultimo_mensaje_led}")
+    elif msg.topic == MQTT_TOPIC_LOG:
+        ultimo_mensaje_log = msg.payload.decode()
+        print(f"Mensaje log recibido: {ultimo_mensaje_log}")
 
 # Inicializar cliente MQTT
 mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -58,11 +74,13 @@ mqtt_client.on_message = on_message
 # Conectar al broker en un hilo separado
 def start_mqtt():
     mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
-    mqtt_client.loop_forever()
+    mqtt_client.loop_start()
+    time.sleep(2)  # Esperar a recibir mensajes retenidos del broker
 
 # Iniciar MQTT en segundo plano
 mqtt_thread = threading.Thread(target=start_mqtt, daemon=True)
 mqtt_thread.start()
+time.sleep(3)  # Dar tiempo a que el cliente MQTT se conecte y reciba los primeros mensajes
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -183,6 +201,36 @@ HTML_TEMPLATE = """
                 grid-template-columns: 1fr;
             }
         }
+
+        .dashboard {
+            display: grid;
+            grid-template-areas:
+                "log log"
+                "door1 led"
+                "door2 led"
+                "temp hum";
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        /* Asignación de áreas */
+        .log { grid-area: log; }
+        .door1 { grid-area: door1; }
+        .door2 { grid-area: door2; }
+        .led { grid-area: led; }
+        .temp { grid-area: temp; }
+        .hum { grid-area: hum; }
+
+        /* LED circular */
+        .led-indicator {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            margin: 20px auto;
+            background: gray;
+            box-shadow: 0 0 15px rgba(0,0,0,0.3);
+        }
+
     </style>
     <script>
         // Auto-refresh cada 2 segundos
@@ -199,33 +247,20 @@ HTML_TEMPLATE = """
         </header>
         
         <div class="dashboard">
-            <div class="card">
-                <h2>Sensor Temperatura</h2>
+
+            <!-- LOG -->
+            <div class="card log">
+                <h2>CONTROL DE ESTADO DE LAS PUERTAS</h2>
                 <div class="message-box">
-                    {{ mensaje_temp }}
+                    {{ mensaje_log }}
                 </div>
                 <div class="info">
-                    <strong>Topic:</strong> <span class="topic-badge">{{ topic_temp }}</span>
-                </div>
-                <div class="timestamp">
-                    Actualizado automáticamente cada 2 segundos
+                    <strong>Topic:</strong> <span class="topic-badge">{{ topic_log }}</span>
                 </div>
             </div>
 
-            <div class="card">
-                <h2>Sensor Humedad</h2>
-                <div class="message-box">
-                    {{ mensaje_hum }}
-                </div>
-                <div class="info">
-                    <strong>Topic:</strong> <span class="topic-badge">{{ topic_hum }}</span>
-                </div>
-                <div class="timestamp">
-                    Actualizado automáticamente cada 2 segundos
-                </div>
-            </div>
-            
-             <div class="card">
+            <!-- PUERTA EXTERIOR -->
+            <div class="card door1">
                 <h2>Puerta Exterior</h2>
                 <div class="message-box">
                     {{ mensaje_door1 }}
@@ -233,12 +268,10 @@ HTML_TEMPLATE = """
                 <div class="info">
                     <strong>Topic:</strong> <span class="topic-badge">{{ topic_door1 }}</span>
                 </div>
-                <div class="timestamp">
-                    Actualizado automáticamente cada 2 segundos
-                </div>
             </div>
 
-             <div class="card">
+            <!-- PUERTA INTERIOR -->
+            <div class="card door2">
                 <h2>Puerta Interior</h2>
                 <div class="message-box">
                     {{ mensaje_door2 }}
@@ -246,13 +279,44 @@ HTML_TEMPLATE = """
                 <div class="info">
                     <strong>Topic:</strong> <span class="topic-badge">{{ topic_door2 }}</span>
                 </div>
-                <div class="timestamp">
-                    Actualizado automáticamente cada 2 segundos
+            </div>
+
+            <!-- LED -->
+            <div class="card led">
+                <h2>ESTADO LED</h2>
+                <div class="led-indicator"></div>
+                <div class="message-box">
+                    {{ mensaje_led }}
+                </div>
+                <div class="info">
+                    <strong>Topic:</strong> <span class="topic-badge">{{ topic_led }}</span>
                 </div>
             </div>
-            
-            <!-- Aquí irán más cards cuando agregues los topics -->
+
+            <!-- TEMPERATURA -->
+            <div class="card temp">
+                <h2>Temperatura</h2>
+                <div class="message-box">
+                    {{ mensaje_temp }}
+                </div>
+                <div class="info">
+                    <strong>Topic:</strong> <span class="topic-badge">{{ topic_temp }}</span>
+                </div>
+            </div>
+
+            <!-- HUMEDAD -->
+            <div class="card hum">
+                <h2>Humedad</h2>
+                <div class="message-box">
+                    {{ mensaje_hum }}
+                </div>
+                <div class="info">
+                    <strong>Topic:</strong> <span class="topic-badge">{{ topic_hum }}</span>
+                </div>
+            </div>
+
         </div>
+
     </div>
 </body>
 </html>
@@ -266,10 +330,14 @@ def index():
         mensaje_temp=ultimo_mensaje_temp,
         mensaje_door1=ultimo_mensaje_door1,
         mensaje_door2=ultimo_mensaje_door2,
+        mensaje_led=ultimo_mensaje_led,
+        mensaje_log=ultimo_mensaje_log,
         topic_temp=MQTT_TOPIC_TEMP,
         topic_hum=MQTT_TOPIC_HUM,
         topic_door1=MQTT_TOPIC_DOOR_1,
-        topic_door2=MQTT_TOPIC_DOOR_2
+        topic_door2=MQTT_TOPIC_DOOR_2,
+        topic_led=MQTT_TOPIC_LED,
+        topic_log=MQTT_TOPIC_LOG
     )
 
 if __name__ == "__main__":
