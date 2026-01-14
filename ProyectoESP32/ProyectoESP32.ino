@@ -18,7 +18,6 @@ void EstadoPuerta2();
 void controlPuertas();
 void beep(int frecuencia, int duracion);
 void manejarControl();
-void goToSleep();
 
 // === WIFI ===
 const char* ssid = "OnePlus3";
@@ -384,35 +383,6 @@ void beep(int frecuencia, int duracion) {
   tone(buzzer, frecuencia);
   delayMicroseconds(duracion * 1000);
   noTone(buzzer);
-}
-
-
-//Añadir el gotoSleep si ha pasado 1 min que no se ha usado el control de puertas
-//El sistema se despertara cuando se abra una puerta.
-//No será deepsleep para no perder comunicaciones wifi 
-void goToSleep(){
-  // Estado seguro
-  noTone(buzzer);
-  ledApagado();
-  puerta1.write(ANG_CERR);
-  puerta2.write(ANG_CERR);
-  delay(150);
-  // Quitar interrupciones de botones para evitar ruido al dormir
-  detachInterrupt(digitalPinToInterrupt(boton1));
-  detachInterrupt(digitalPinToInterrupt(boton2));
-
-  // Apagar WiFi para bajar consumo
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
-
-  // Configurar touchpad
-  int THRESHOLD = touchRead(TOUCH_CH) - TOUCH_THRESHOLD;
-  touchAttachInterrupt(TOUCH_CH, nullptr, THRESHOLD);
-  esp_sleep_enable_touchpad_wakeup();
-
-  Serial.println("Deep sleep activado. Toca el pin táctil GPIO 4 (T0) para despertar.");
-  delay(50);
-  esp_deep_sleep_start();
 }
 
 // Conectar/Reconectar al broker MQTT
